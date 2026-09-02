@@ -1,66 +1,38 @@
-# NPS KING — GitHub Pages + Supabase
+# NPS KING – Google Keyword + Gujarat Lead CRM
 
-તમારી NPS KING Gujarati website હવે Supabase cloud database માટે તૈયાર છે.
+This package adds:
+- Supabase cloud storage for website settings, customers and leads.
+- Unlimited Google keyword manager in Admin Panel (add/edit/delete/active).
+- Keyword and Gujarat-state lead filters in Leads CRM.
+- Google Ads Lead Form webhook receiver via Supabase Edge Function.
+- Google Ads test lead button that writes to Supabase.
+- Website leads retain Google source/UTM/GCLID/keyword information when available.
 
-## આ packageમાં
+## 1) Supabase SQL
+Run `supabase_schema.sql` once in Supabase SQL Editor.
 
-- `index.html` — live website
-- `config.js` — તમારા Supabase projectનું public configuration
-- `cloud_patch.js` — online Leads / Customers / Settings / Admin Login integration
-- `supabase_schema.sql` — tables, RLS policies અને secure public status lookup
+## 2) Admin user
+Create the admin user in Supabase Authentication → Users with the configured email in `config.js`.
 
-## 1. Supabase Database તૈયાર કરો
+## 3) Deploy the Google webhook Edge Function
+Install Supabase CLI, login, link this project, then deploy:
 
-Supabase Dashboard → **SQL Editor** → New query → `supabase_schema.sql` ની આખી contents paste કરો → **Run**.
+```bash
+supabase login
+supabase link --project-ref gkdwojcxbbnksxivbpel
+supabase functions deploy google-leads --no-verify-jwt
+supabase secrets set GOOGLE_WEBHOOK_KEY="CHANGE_THIS_TO_A_LONG_RANDOM_SECRET"
+```
 
-આથી:
-- `site_settings` table
-- `customers` table
-- `leads` table
-- Row Level Security policies
-- public application status lookup function
+The webhook URL shown to Google Ads will be:
+`https://gkdwojcxbbnksxivbpel.supabase.co/functions/v1/google-leads?key=YOUR_WEBHOOK_KEY`
 
-બનશે.
+Replace `YOUR_WEBHOOK_KEY` with the exact secret value you set. Do not put a Supabase service-role key in the website.
 
-## 2. Admin user બનાવો
+## 4) Google Ads
+Create a Search campaign targeting Gujarat and add a Google Lead Form asset. Google supports delivering lead-form submissions to a CRM through a webhook or Google Ads API. The form should collect name and phone/email and must include the required privacy-policy URL.
 
-Supabase Dashboard → **Authentication → Users → Add user / Create user**.
+Important: simply searching Google does NOT reveal a person's name or mobile number. A lead is created only when the person submits your website form or Google-hosted lead form. Exact organic Google search terms are also not guaranteed to be available to a website because Google commonly hides them; for Ads, use GCLID/UTM/campaign data and Google Ads reporting/API where applicable.
 
-Email:
-`psi.shailesh@gmail.com`
-
-તમારો પોતાનો strong password set કરો.
-
-જો Supabase email confirmation માંગે તો userને confirm કરો અથવા projectની authentication setting પ્રમાણે confirmation complete કરો.
-
-## 3. GitHub પર upload
-
-Repositoryમાં root folderમાં આ ત્રણ files હોવી જરૂરી છે:
-
-- `index.html`
-- `config.js`
-- `cloud_patch.js`
-
-`supabase_schema.sql` ને repositoryમાં રાખવું optional છે, પણ setup record માટે રાખી શકો છો.
-
-## 4. GitHub Pages
-
-GitHub Repository → **Settings → Pages** → Source: **Deploy from a branch** → Branch: `main` → Folder: `/ (root)` → Save.
-
-થોડા સમય પછી GitHub Pages URL મળશે.
-
-## 5. Supabase Auth URL
-
-Supabase → **Authentication → URL Configuration** માં તમારી GitHub Pages URL ને **Site URL** તરીકે મૂકો અને જરૂર પડે તો Redirect URLsમાં પણ ઉમેરો.
-
-## Security
-
-- `config.js`માં માત્ર public/publishable key છે.
-- `service_role` અથવા secret key ક્યારેય frontendમાં ન મૂકવી.
-- Leads public visitor દ્વારા insert થઈ શકે છે, પરંતુ public visitor leads વાંચી શકતો નથી.
-- Customers/Leads/Settings વાંચવા અને manage કરવા માટે authenticated admin session જરૂરી છે.
-- Public status lookup માત્ર નામ, PRAN અને status આપે છે.
-
-## નોંધ
-
-Google Ads lead delivery માટે private Google credential frontendમાં ન મૂકવો. હાલ website source/keyword capture કરીને Supabaseમાં lead record save કરે છે. Actual Google Lead Form webhook માટે અલગ server-side integration જરૂરી છે.
+## 5) GitHub Pages
+Upload the package files to the repository root. Keep `index.html`, `config.js`, `cloud_patch.js` together. Enable GitHub Pages from the repository's main branch/root.
