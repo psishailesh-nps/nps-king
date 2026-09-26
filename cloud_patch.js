@@ -11,11 +11,12 @@
 
   async function loadCloud(){
     try {
-      const [s,c,l,k] = await Promise.all([
+      const [s,c,l,k,os] = await Promise.all([
         db.from('site_settings').select('data').eq('id','main').maybeSingle(),
         db.from('customers').select('*').order('updated_at',{ascending:false}),
         db.from('leads').select('*').order('created_at',{ascending:false}),
-        db.from('google_keywords').select('*').order('created_at',{ascending:false})
+        db.from('google_keywords').select('*').order('created_at',{ascending:false}),
+        db.from('other_services').select('*').eq('active',true).order('sort_order',{ascending:true}).order('created_at',{ascending:true})
       ]);
       // IMPORTANT: never replace working local/default data with an empty cloud table.
       // This prevents the website from appearing blank when Supabase has not been seeded yet.
@@ -30,6 +31,8 @@
       if (Array.isArray(l.data) && l.data.length) leadInquiries=l.data.map(normalizeLead);
       else if (!Array.isArray(leadInquiries)) leadInquiries=[];
       window.npsKeywords=Array.isArray(k.data)?k.data:[];
+      window.otherServices=Array.isArray(os.data)?os.data:[];
+      renderOtherServices();
     } catch(e){ console.warn('Cloud load failed',e); }
   }
 
@@ -80,6 +83,12 @@
   window.updateGoogleKeyword=async function(id,keyword,match_type,active){ const {error}=await db.from('google_keywords').update({keyword,match_type,active,updated_at:new Date().toISOString()}).eq('id',id); if(error) return showToast(error.message); await reloadKeywords(); showToast('કીવર્ડ અપડેટ થયો.'); };
   window.deleteGoogleKeyword=async function(id){ if(!confirm('આ કીવર્ડ ડિલીટ કરવો છે?')) return; const {error}=await db.from('google_keywords').delete().eq('id',id); if(error) return showToast(error.message); await reloadKeywords(); showToast('કીવર્ડ ડિલીટ થયો.'); };
 
+  window.renderOtherServices=function(){
+    const box=document.getElementById('other-services-container'); if(!box) return;
+    const list=window.otherServices||[];
+    box.innerHTML=list.length ? list.map(s=>'<div class="royal-card p-5 rounded-xl border border-gold-500/20 hover:border-gold-500/40 transition-all"><div class="flex items-start gap-3"><div class="w-10 h-10 rounded-lg bg-gold-500/10 text-gold-400 flex items-center justify-center"><i class="'+esc(s.icon||'fa-solid fa-circle-info')+'"></i></div><div class="flex-1"><h4 class="font-bold text-white">'+esc(s.title)+'</h4><p class="text-xs text-slate-400 mt-1">'+esc(s.description)+'</p>'+(s.link_url?'<a href="'+esc(s.link_url)+'" target="_blank" rel="noopener" class="inline-flex mt-3 text-xs font-bold text-gold-400 hover:text-gold-300">'+esc(s.link_text||'વધુ માહિતી')+'</a>':'')+'</div></div></div>').join('') : '<div class="text-center text-slate-500 py-8">હાલ કોઈ સર્વિસ ઉપલબ્ધ નથી.</div>';
+  };
+
   window.renderKeywordManager=function(){
     const box=document.getElementById('nps-keyword-manager'); if(!box) return;
     const list=window.npsKeywords||[];
@@ -128,9 +137,34 @@
   // Replace old localStorage customer/lead operations with cloud-backed operations where possible.
   const oldSaveCustomer=window.saveCustomerRecord;
   window.saveCustomerRecord=async function(e){ e.preventDefault(); const editId=document.getElementById('cust-id').value; const row={id:editId?Number(editId):safeId(),name:document.getElementById('cust-name').value.trim(),phone:document.getElementById('cust-phone').value.trim(),pran:document.getElementById('cust-pran').value.trim(),city:document.getElementById('cust-city').value.trim(),corpus:document.getElementById('cust-corpus').value.trim(),status:document.getElementById('cust-status').value,plan_type:document.getElementById('cust-plan').value,notes:document.getElementById('cust-notes').value.trim(),date:new Date().toLocaleDateString('gu-IN'),updated_at:new Date().toISOString()}; const {error}=await db.from('customers').upsert(row); if(error)return showToast(error.message); await loadCloud(); closeCustomerModal(); updateCustomerStatistics(); renderAdminCustomerTable(); showToast('કસ્ટમર સેવ થયો.'); };
+  window.updateCustomerStatusDirect=async function(index,newStatus){
+    const cust=siteData.customers?.[index]; if(!cust) return;
+    const {error}=await db.from('customers').update({status:newStatus,updated_at:new Date().toISOString()}).eq('id',cust.id);
+    if(error)return showToast(error.message);
+    await loadCloud(); renderAdminCustomerTable(); updateCustomerStatistics(); showToast('સ્ટેટસ Supabaseમાં અપડેટ થઈ ગયું.');
+  };
+  window.deleteCustomerRecord=async function(index){
+    const cust=siteData.customers?.[index]; if(!cust || !confirm('શું તમે આ કસ્ટમરની વિગતો કાયમ માટે ડિલીટ કરવા માગો છો?')) return;
+    const {error}=await db.from('customers').delete().eq('id',cust.id);
+    if(error)return showToast(error.message);
+    await loadCloud(); renderAdminCustomerTable(); updateCustomerStatistics(); showToast('કસ્ટમર Supabaseમાંથી ડિલીટ થયો.');
+  };
+
   window.deleteLead=async function(index){ const lead=leadInquiries[index]; if(!lead)return; if(!confirm('આ લીડ ડિલીટ કરવી છે?'))return; const {error}=await db.from('leads').delete().eq('id',lead.id); if(error)return showToast(error.message); leadInquiries.splice(index,1); renderAdminLeadsTable(); updateCustomerStatistics(); showToast('લીડ ડિલીટ થઈ ગઈ.'); };
   window.clearAllLeads=async function(){ if(!confirm('બધી લીડ્સ ડિલીટ કરવી છે?'))return; const {error}=await db.from('leads').delete().not('id','is',null); if(error)return showToast(error.message); leadInquiries=[]; renderAdminLeadsTable(); updateCustomerStatistics(); showToast('બધી લીડ્સ સાફ થઈ ગઈ.'); };
 
+  function injectOtherServicesUI(){
+    if(document.getElementById('tab-other-services')) return;
+    const tabBar=document.querySelector('.tab-btn')?.parentElement;
+    if(tabBar){ const b=document.createElement('button'); b.id='tab-other-services'; b.className='tab-btn text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 whitespace-nowrap transition-all'; b.innerHTML='<i class="fa-solid fa-grid-2 mr-1.5"></i> આમારી સર્વિસ'; b.onclick=()=>switchTab('other-services'); tabBar.insertBefore(b,document.getElementById('tab-admin')); }
+    const main=document.querySelector('main');
+    if(main && !document.getElementById('section-other-services')){ const sec=document.createElement('div'); sec.id='section-other-services'; sec.className='tab-content hidden space-y-6'; sec.innerHTML='<div class="border-b border-slate-800 pb-4"><h3 class="text-xl font-bold gold-gradient-text">આમારી સર્વિસ</h3></div><div id="other-services-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>'; main.insertBefore(sec,main.children[1]||null); }
+    const adminPane=document.getElementById('admin-pane-customers'); const side=adminPane?.parentElement?.previousElementSibling;
+    if(side && !document.getElementById('admin-subtab-other-services')){ const b=document.createElement('button'); b.id='admin-subtab-other-services'; b.onclick=()=>switchAdminSubTab('other-services'); b.className='admin-sub-btn w-full text-left text-xs font-semibold text-slate-300 hover:bg-slate-800 px-3 py-2.5 rounded-lg flex items-center gap-2'; b.innerHTML='<i class="fa-solid fa-grid-2"></i> આમારી સર્વિસ'; side.insertBefore(b,document.getElementById('admin-subtab-general')); }
+    if(adminPane?.parentElement && !document.getElementById('admin-pane-other-services')){ const p=document.createElement('div'); p.id='admin-pane-other-services'; p.className='admin-pane hidden space-y-4'; p.innerHTML='<div class="border-b border-slate-800 pb-3"><h4 class="text-sm font-bold text-gold-400">આમારી સર્વિસ — Supabase Live</h4><p class="text-xs text-slate-400">Supabaseમાં સેવ થયેલી active services અહીં live દેખાય છે.</p></div><div id="admin-other-services-live" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>'; adminPane.parentElement.appendChild(p); }
+    renderOtherServices(); const a=document.getElementById('admin-other-services-live'); if(a) a.innerHTML=(window.otherServices||[]).map(x=>'<div class="bg-navy-900 border border-slate-700 rounded-lg p-3"><b class="text-white text-xs">'+esc(x.title)+'</b><p class="text-[10px] text-slate-400 mt-1">'+esc(x.description)+'</p></div>').join('') || '<p class="text-xs text-slate-500">કોઈ active service નથી.</p>';
+  }
+
   // Inject keyword manager into existing Google admin pane.
-  window.addEventListener('load',()=>{ const pane=document.getElementById('admin-pane-google-leads'); if(pane && !document.getElementById('nps-keyword-manager')){ const d=document.createElement('div'); d.id='nps-keyword-manager'; pane.appendChild(d); } renderKeywordManager(); injectLeadFilters(); updateGoogleWebhookUI(); });
+  window.addEventListener('load',()=>{ injectOtherServicesUI(); const pane=document.getElementById('admin-pane-google-leads'); if(pane && !document.getElementById('nps-keyword-manager')){ const d=document.createElement('div'); d.id='nps-keyword-manager'; pane.appendChild(d); } renderKeywordManager(); injectLeadFilters(); updateGoogleWebhookUI(); });
 })();
