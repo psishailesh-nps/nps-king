@@ -17,15 +17,26 @@
         db.from('leads').select('*').order('created_at',{ascending:false}),
         db.from('google_keywords').select('*').order('created_at',{ascending:false})
       ]);
-      if (s.data?.data && Object.keys(s.data.data).length) siteData = {...siteData,...s.data.data};
-      if (!siteData.customers && c.data) siteData.customers=[];
-      if (c.data) siteData.customers=c.data.map(x=>({id:x.id,name:x.name,phone:x.phone,pran:x.pran,city:x.city,corpus:x.corpus,status:x.status,planType:x.plan_type,notes:x.notes,date:x.date}));
-      if (l.data) leadInquiries=l.data.map(normalizeLead);
-      window.npsKeywords=k.data||[];
+      // IMPORTANT: never replace working local/default data with an empty cloud table.
+      // This prevents the website from appearing blank when Supabase has not been seeded yet.
+      if (s.data?.data && Object.keys(s.data.data).length) {
+        siteData = {...siteData,...s.data.data};
+      }
+      if (Array.isArray(c.data) && c.data.length) {
+        siteData.customers=c.data.map(x=>({id:x.id,name:x.name,phone:x.phone,pran:x.pran,city:x.city,corpus:x.corpus,status:x.status,planType:x.plan_type,notes:x.notes,date:x.date}));
+      } else if (!Array.isArray(siteData.customers)) {
+        siteData.customers=[];
+      }
+      if (Array.isArray(l.data) && l.data.length) leadInquiries=l.data.map(normalizeLead);
+      else if (!Array.isArray(leadInquiries)) leadInquiries=[];
+      window.npsKeywords=Array.isArray(k.data)?k.data:[];
     } catch(e){ console.warn('Cloud load failed',e); }
   }
 
   window.initApp = async function(){
+    // First restore the site's existing local/default data, then overlay Supabase data.
+    // This is essential when the Supabase tables are empty or not yet seeded.
+    try { if (typeof originalInit === 'function') originalInit(); } catch(e){ console.warn('Local init failed',e); }
     try { await loadCloud(); } catch(e){}
     if (typeof detectGoogleVisitor==='function') detectGoogleVisitor();
     if (typeof renderDynamicContent==='function') renderDynamicContent();
